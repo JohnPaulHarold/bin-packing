@@ -57,91 +57,200 @@ Example:
 
 ******************************************************************************/
 
-GrowingPacker = function() { };
+var GrowingPacker = function () { 
+  // we might only want to grow in a specific direction, 
+  // as opposed to getting larger and larger as a square
+  // 
+  // 
+  // we might also want to limit how far back nodes will be filled. 
+  // Assuming we want to show the passing of time, we would 
+  // limit how far back nodes should be filled.
+  // 
+  // 
+  
+  
+  var growthDirection;
+  // for the particular constrained direction, we set a max height.
+  var maxConstrainedSize;
 
-GrowingPacker.prototype = {
+  var container;
 
-  fit: function(blocks) {
+  var packElemGap;
+
+  var self = this;
+
+
+  self.init = function (_growthDirection, _maxConstrainedSize, _containerElement, _packElemGap) {
+    growthDirection = _growthDirection;
+    // for the particular constrained direction, we set a max height.
+    maxConstrainedSize = _maxConstrainedSize;
+
+    container = _containerElement ? document.querySelector(_containerElement) : undefined;
+
+    packElemGap = (_packElemGap || _packElemGap === 0 ) ? _packElemGap : 10;
+  };
+
+
+  self.addPaddingToBlocks = function (blocks) {
+    for (var i = 0; i<blocks.length; i+=1) {
+      var block = blocks[i];
+
+      block.w += ((packElemGap || packElemGap === 0) ? packElemGap * 2 : 10);
+      block.h += ((packElemGap || packElemGap === 0) ? packElemGap * 2 : 10);
+    }
+
+    return blocks;
+  };
+
+
+  self.fit = function (blocks) {
     var n, node, block, len = blocks.length;
-    var w = len > 0 ? blocks[0].w : 0;
-    var h = len > 0 ? blocks[0].h : 0;
-    this.root = { x: 0, y: 0, w: w, h: h };
+
+    var w, h;
+
+    // add some padding before we start any fitting
+
+    blocks = self.addPaddingToBlocks(blocks);
+    
+    if (growthDirection === 'right') {
+      w = len > 0 ? blocks[0].w : 0;
+      h = len > 0 ? maxConstrainedSize : 0;
+    } else {
+      w = len > 0 ? maxConstrainedSize : 0;
+      h = len > 0 ? blocks[0].h : 0;
+    }
+
+    // we set the initial root node?
+    // x, y = starting position
+    // w, h = starting size.
+    self.root = { x: 0, y: 0, w: w, h: h };
     for (n = 0; n < len ; n++) {
       block = blocks[n];
-      if (node = this.findNode(this.root, block.w, block.h))
-        block.fit = this.splitNode(node, block.w, block.h);
-      else
-        block.fit = this.growNode(block.w, block.h);
+      node = self.findNode(self.root, block.w, block.h);
+      
+      if (node) {
+        block.fit = self.splitNode(node, block.w, block.h);
+      } else {
+        // if we couldn't find a node to fit into, we need to grow the rootNode
+        // pass in the block that couldn't fit
+        block.fit = self.growNode(block.w, block.h);
+      }
     }
-  },
+  };
 
-  findNode: function(root, w, h) {
+  self.findNode = function (root, blockWidth, blockHeight) {
     if (root.used)
-      return this.findNode(root.right, w, h) || this.findNode(root.down, w, h);
-    else if ((w <= root.w) && (h <= root.h))
+      // if we've already used this root node, find another
+      // recursively call this method
+      return self.findNode(root.right, blockWidth, blockHeight) || self.findNode(root.down, blockWidth, blockHeight);
+    else if ((blockWidth <= root.w) && (blockHeight  <= root.h))
       return root;
     else
       return null;
-  },
+  };
 
-  splitNode: function(node, w, h) {
+  self.splitNode = function (node, w, h) {
     node.used = true;
+
+    /* 
+    OK, here we split the remaining area after we've placed a node
+    it seems to split it into a down node, and a right node
+    
+    For the down node, we set the positon as the starting X and the bottom edge of the source node
+
+    For the right node, we set the position as the right edge of the source node, and the starting top y pos
+
+    */
     node.down  = { x: node.x,     y: node.y + h, w: node.w,     h: node.h - h };
     node.right = { x: node.x + w, y: node.y,     w: node.w - w, h: h          };
     return node;
-  },
+  };
 
-  growNode: function(w, h) {
-    var canGrowDown  = (w <= this.root.w);
-    var canGrowRight = (h <= this.root.h);
+  self.growNode = function (w, h) {
 
-    var shouldGrowRight = canGrowRight && (this.root.h >= (this.root.w + w)); // attempt to keep square-ish by growing right when height is much greater than width
-    var shouldGrowDown  = canGrowDown  && (this.root.w >= (this.root.h + h)); // attempt to keep square-ish by growing down  when width  is much greater than height
+    // depending on our constraints, we shouldn't grow in the opposite direction
+
+    var canGrowDown  = (w <= self.root.w);
+    var canGrowRight = (h <= self.root.h);
+
+    var shouldGrowRight,
+        shouldGrowDown;
+
+    if (growthDirection === "right") {
+      // grow horizontally only
+
+      shouldGrowRight = canGrowRight && (self.root.h >= (self.root.w + w)); // attempt to keep square-ish by growing right when height is much greater than width
+      shouldGrowDown  = false;
+
+    } else {
+      // grow vertically only
+
+      shouldGrowRight = false;
+      shouldGrowDown  = canGrowDown  && (self.root.w >= (self.root.h + h)); // attempt to keep square-ish by growing down  when width  is much greater than height
+
+    }
+
+    
 
     if (shouldGrowRight)
-      return this.growRight(w, h);
+      return self.growRight(w, h);
     else if (shouldGrowDown)
-      return this.growDown(w, h);
+      return self.growDown(w, h);
     else if (canGrowRight)
-     return this.growRight(w, h);
+     return self.growRight(w, h);
     else if (canGrowDown)
-      return this.growDown(w, h);
+      return self.growDown(w, h);
     else
       return null; // need to ensure sensible root starting size to avoid this happening
-  },
+  };
 
-  growRight: function(w, h) {
-    this.root = {
+  self.growRight = function (w, h) {
+    self.root = {
       used: true,
       x: 0,
       y: 0,
-      w: this.root.w + w,
-      h: this.root.h,
-      down: this.root,
-      right: { x: this.root.w, y: 0, w: w, h: this.root.h }
+      w: self.root.w + w,
+      h: self.root.h,
+      down: self.root,
+      right: { 
+        x: self.root.w, 
+        y: 0, 
+        w: w, 
+        h: self.root.h 
+      }
     };
-    if (node = this.findNode(this.root, w, h))
-      return this.splitNode(node, w, h);
+
+    if (container) {
+        container.style.width = self.root.w + w + "px";
+    }
+    
+    var foundNode = self.findNode(self.root, w, h);
+
+    if (foundNode)
+      return self.splitNode(foundNode, w, h);
     else
       return null;
-  },
+  };
 
-  growDown: function(w, h) {
-    this.root = {
+  self.growDown = function (w, h) {
+    self.root = {
       used: true,
       x: 0,
       y: 0,
-      w: this.root.w,
-      h: this.root.h + h,
-      down:  { x: 0, y: this.root.h, w: this.root.w, h: h },
-      right: this.root
+      w: self.root.w,
+      h: self.root.h + h,
+      down:  { x: 0, y: self.root.h, w: self.root.w, h: h },
+      right: self.root
     };
-    if (node = this.findNode(this.root, w, h))
-      return this.splitNode(node, w, h);
+
+    var foundNode = self.findNode(self.root, w, h);
+    
+    if (foundNode)
+      return self.splitNode(foundNode, w, h);
     else
       return null;
-  }
+  };
+};
 
-}
-
+module.exports = new GrowingPacker();
 
